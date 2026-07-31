@@ -12,6 +12,8 @@ export const metadata: Metadata = {
   },
 };
 
+export const runtime = 'edge';
+
 export const viewport: Viewport = {
   themeColor: '#0284c7',
   width: 'device-width',
