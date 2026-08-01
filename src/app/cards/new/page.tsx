@@ -11,7 +11,7 @@ export default function NewCardPage() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [bank, setBank] = useState('');
-  const [cardholderName, setCardholderName] = useState('César Rodríguez');
+  const [cardholderName, setCardholderName] = useState('');
   const [brand, setBrand] = useState('Visa');
   const [lastFourDigits, setLastFourDigits] = useState('');
   const [defaultClosingDay, setDefaultClosingDay] = useState(25);
@@ -29,7 +29,7 @@ export default function NewCardPage() {
     const currentStore = DataStore.getStore();
     const newCard: Card = {
       id: 'card-' + Date.now(),
-      household_id: 'household-hogar-999',
+      household_id: currentStore.households[0]?.id || 'household-default',
       name,
       bank,
       cardholder_name: cardholderName,
@@ -46,7 +46,7 @@ export default function NewCardPage() {
 
     currentStore.cards.push(newCard);
     DataStore.saveStore(currentStore);
-    DataStore.addAuditLog('household-hogar-999', 'Creó tarjeta', 'card', newCard.id, null, newCard);
+    DataStore.addAuditLog(currentStore.households[0]?.id || 'household-default', 'Creó tarjeta', 'card', newCard.id, null, newCard);
 
     router.push('/cards');
   };
@@ -75,7 +75,7 @@ export default function NewCardPage() {
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ej. Visa Galicia César"
+              placeholder="Ej. Visa Banco Galicia, Mastercard Nación"
               className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-sky-500 transition"
             />
           </div>
@@ -90,7 +90,7 @@ export default function NewCardPage() {
                 required
                 value={bank}
                 onChange={(e) => setBank(e.target.value)}
-                placeholder="Ej. Banco Galicia"
+                placeholder="Ej. Banco Galicia, BBVA"
                 className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-sky-500 transition"
               />
             </div>
@@ -123,6 +123,7 @@ export default function NewCardPage() {
                 required
                 value={cardholderName}
                 onChange={(e) => setCardholderName(e.target.value)}
+                placeholder="Nombre y Apellido del Titular"
                 className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-sky-500 transition"
               />
             </div>
@@ -137,7 +138,7 @@ export default function NewCardPage() {
                 required
                 value={lastFourDigits}
                 onChange={(e) => setLastFourDigits(e.target.value)}
-                placeholder="4589"
+                placeholder="1234"
                 className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-slate-100 font-mono text-sm focus:outline-none focus:border-sky-500 transition"
               />
             </div>

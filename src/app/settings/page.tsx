@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Navigation } from '@/components/Navigation';
+import { DataStore } from '@/lib/data-store';
 import { Settings, Globe, DollarSign, Clock, ShieldCheck } from 'lucide-react';
 
 export default function GeneralSettingsPage() {

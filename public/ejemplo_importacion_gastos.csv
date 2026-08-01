@@ -1,5 +1,5 @@
 fecha;descripcion;comercio;importe;moneda;tarjeta;categoria;cuotas;responsable
-2026-08-01;Supermercado semanal;Coto CICA;85000.00;ARS;Visa Galicia César;Supermercado;1;César
-2026-08-02;Cena de cumpleaños;Restaurante El Faro;42000.00;ARS;Mastercard Santa Fe Antonela;Comida;1;Antonela
-2026-08-05;Suscripción Vercel Pro;Vercel Inc;20.00;USD;Visa Banco Nación;Servicios;1;César
-2026-08-10;Heladera No Frost;Frávega;360000.00;ARS;Visa Galicia César;Hogar;6;César
+2026-08-01;Supermercado semanal;Coto;85000.00;ARS;Visa Banco Galicia;Supermercado;1;Juan
+2026-08-02;Cena de cumpleaños;Restaurante El Faro;42000.00;ARS;Mastercard Banco Nación;Comida;1;Maria
+2026-08-05;Suscripción Servidores;Vercel Inc;20.00;USD;Visa Banco Galicia;Servicios;1;Juan
+2026-08-10;Heladera No Frost;Frávega;360000.00;ARS;Visa Banco Galicia;Hogar;6;Juan

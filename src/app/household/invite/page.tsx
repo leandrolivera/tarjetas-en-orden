@@ -6,11 +6,12 @@ import { Mail, UserPlus, CheckCircle2, ArrowRight } from 'lucide-react';
 
 export default function HouseholdInvitePage() {
   const router = useRouter();
-  const [partnerEmail, setPartnerEmail] = useState('antonela@hogar.com');
+  const [partnerEmail, setPartnerEmail] = useState('');
   const [invited, setInvited] = useState(false);
 
   const handleInvite = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!partnerEmail) return;
     setInvited(true);
   };
 
@@ -53,7 +54,7 @@ export default function HouseholdInvitePage() {
                   required
                   value={partnerEmail}
                   onChange={(e) => setPartnerEmail(e.target.value)}
-                  placeholder="pareja@correo.com"
+                  placeholder="ejemplo@correo.com"
                   className="w-full pl-11 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 text-sm transition"
                 />
               </div>
