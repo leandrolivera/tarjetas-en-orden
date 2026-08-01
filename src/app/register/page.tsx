@@ -3,7 +3,9 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Mail, Lock, User, UserPlus, ArrowRight } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight } from 'lucide-react';
+import { DataStore } from '@/lib/data-store';
+import { Profile, Person } from '@/lib/types';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -14,11 +16,40 @@ export default function RegisterPage() {
 
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!fullName || !email) return;
     setLoading(true);
+
+    const store = DataStore.getStore();
+    const userId = 'usr-' + Date.now();
+    const newProfile: Profile = {
+      id: userId,
+      email,
+      full_name: fullName,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const newPerson: Person = {
+      id: 'person-' + userId,
+      household_id: '',
+      user_id: userId,
+      name: fullName.split(' ')[0] || fullName,
+      last_name: fullName.split(' ').slice(1).join(' ') || '',
+      alias: fullName.split(' ')[0],
+      is_active: true,
+      created_by: userId,
+      created_at: new Date().toISOString(),
+    };
+
+    store.profiles.push(newProfile);
+    store.people.push(newPerson);
+    store.currentUserId = userId;
+    DataStore.saveStore(store);
+
     setTimeout(() => {
       setLoading(false);
       router.push('/household/setup');
-    }, 600);
+    }, 400);
   };
 
   return (
@@ -28,14 +59,14 @@ export default function RegisterPage() {
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-sky-600 to-emerald-500 flex items-center justify-center font-bold text-2xl text-white mx-auto mb-3">
             ✨
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-white mb-1">Crear Cuenta</h1>
-          <p className="text-xs text-slate-400">Sumate a Tarjetas en Orden en un minuto</p>
+          <h1 className="text-2xl font-black tracking-tight text-white mb-1">Crear tu Cuenta</h1>
+          <p className="text-xs text-slate-400">Sumate a Tarjetas en Orden para empezar desde cero</p>
         </div>
 
         <form onSubmit={handleRegister} className="space-y-4">
           <div>
             <label className="block text-xs font-bold uppercase text-slate-400 mb-1.5">
-              Nombre Completo
+              Tu Nombre Completo *
             </label>
             <div className="relative">
               <User className="w-5 h-5 text-slate-500 absolute left-3.5 top-3" />
@@ -44,7 +75,7 @@ export default function RegisterPage() {
                 required
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                placeholder="Ej. Antonela Gómez"
+                placeholder="Ej. Juan Pérez"
                 className="w-full pl-11 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 text-sm transition"
               />
             </div>
@@ -52,7 +83,7 @@ export default function RegisterPage() {
 
           <div>
             <label className="block text-xs font-bold uppercase text-slate-400 mb-1.5">
-              Correo Electrónico
+              Correo Electrónico *
             </label>
             <div className="relative">
               <Mail className="w-5 h-5 text-slate-500 absolute left-3.5 top-3" />
@@ -69,7 +100,7 @@ export default function RegisterPage() {
 
           <div>
             <label className="block text-xs font-bold uppercase text-slate-400 mb-1.5">
-              Contraseña
+              Contraseña *
             </label>
             <div className="relative">
               <Lock className="w-5 h-5 text-slate-500 absolute left-3.5 top-3" />
@@ -94,7 +125,7 @@ export default function RegisterPage() {
               <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : (
               <>
-                <span>Registrarme</span>
+                <span>Registrarme y Crear Hogar</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}

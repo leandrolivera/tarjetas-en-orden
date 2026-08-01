@@ -13,21 +13,9 @@ import {
   Notification,
   AuditLog,
 } from './types';
-import {
-  DEMO_PROFILES,
-  DEMO_HOUSEHOLD,
-  DEMO_MEMBERS,
-  DEMO_PEOPLE,
-  DEMO_CATEGORIES,
-  DEMO_CARDS,
-  DEMO_EXPENSES,
-  DEMO_STATEMENTS,
-  DEMO_REIMBURSEMENTS,
-  DEMO_RECURRING,
-  DEMO_NOTIFICATIONS,
-} from './mock-storage';
+import { DEMO_CATEGORIES } from './mock-storage';
 
-const STORAGE_KEY = 'tarjetas_en_orden_store_v1';
+const STORAGE_KEY = 'tarjetas_en_orden_store_v2';
 
 export interface AppStoreData {
   profiles: Profile[];
@@ -45,69 +33,26 @@ export interface AppStoreData {
   currentUserId: string;
 }
 
-function getInitialStore(): AppStoreData {
-  if (typeof window === 'undefined') {
-    return {
-      profiles: DEMO_PROFILES,
-      households: [DEMO_HOUSEHOLD],
-      members: DEMO_MEMBERS,
-      people: DEMO_PEOPLE,
-      categories: DEMO_CATEGORIES,
-      cards: DEMO_CARDS,
-      expenses: DEMO_EXPENSES,
-      statements: DEMO_STATEMENTS,
-      reimbursements: DEMO_REIMBURSEMENTS,
-      recurring: DEMO_RECURRING,
-      notifications: DEMO_NOTIFICATIONS,
-      auditLogs: [],
-      currentUserId: 'user-cesar-111',
-    };
-  }
-
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      return JSON.parse(raw);
-    }
-  } catch (e) {
-    console.error('Failed to parse local storage', e);
-  }
-
-  const initial: AppStoreData = {
-    profiles: DEMO_PROFILES,
-    households: [DEMO_HOUSEHOLD],
-    members: DEMO_MEMBERS,
-    people: DEMO_PEOPLE,
+function getCleanInitialStore(): AppStoreData {
+  return {
+    profiles: [],
+    households: [],
+    members: [],
+    people: [],
     categories: DEMO_CATEGORIES,
-    cards: DEMO_CARDS,
-    expenses: DEMO_EXPENSES,
-    statements: DEMO_STATEMENTS,
-    reimbursements: DEMO_REIMBURSEMENTS,
-    recurring: DEMO_RECURRING,
-    notifications: DEMO_NOTIFICATIONS,
-    auditLogs: [
-      {
-        id: 'log-init',
-        household_id: 'household-hogar-999',
-        user_id: 'user-cesar-111',
-        action: 'Sistema inicializado',
-        entity_type: 'system',
-        entity_id: 'sys-1',
-        created_at: new Date().toISOString(),
-      },
-    ],
-    currentUserId: 'user-cesar-111',
+    cards: [],
+    expenses: [],
+    statements: [],
+    reimbursements: [],
+    recurring: [],
+    notifications: [],
+    auditLogs: [],
+    currentUserId: '',
   };
-
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
-  } catch (e) {}
-
-  return initial;
 }
 
 export class DataStore {
-  private static data: AppStoreData = getInitialStore();
+  private static data: AppStoreData = getCleanInitialStore();
 
   public static getStore(): AppStoreData {
     if (typeof window !== 'undefined') {
@@ -115,6 +60,7 @@ export class DataStore {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) {
           DataStore.data = JSON.parse(raw);
+          return DataStore.data;
         }
       } catch (e) {}
     }
@@ -130,24 +76,10 @@ export class DataStore {
     }
   }
 
-  public static resetToDemo() {
-    const initial: AppStoreData = {
-      profiles: DEMO_PROFILES,
-      households: [DEMO_HOUSEHOLD],
-      members: DEMO_MEMBERS,
-      people: DEMO_PEOPLE,
-      categories: DEMO_CATEGORIES,
-      cards: DEMO_CARDS,
-      expenses: DEMO_EXPENSES,
-      statements: DEMO_STATEMENTS,
-      reimbursements: DEMO_REIMBURSEMENTS,
-      recurring: DEMO_RECURRING,
-      notifications: DEMO_NOTIFICATIONS,
-      auditLogs: [],
-      currentUserId: 'user-cesar-111',
-    };
-    DataStore.saveStore(initial);
-    return initial;
+  public static resetToClean() {
+    const clean = getCleanInitialStore();
+    DataStore.saveStore(clean);
+    return clean;
   }
 
   // AUDIT LOG HELPER

@@ -2,14 +2,47 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Home, Users, Plus, ArrowRight } from 'lucide-react';
+import { Home, ArrowRight } from 'lucide-react';
+import { DataStore } from '@/lib/data-store';
+import { Household, HouseholdMember } from '@/lib/types';
 
 export default function HouseholdSetupPage() {
   const router = useRouter();
-  const [householdName, setHouseholdName] = useState('Hogar César y Antonela');
+  const [householdName, setHouseholdName] = useState('Mi Hogar');
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!householdName) return;
+
+    const store = DataStore.getStore();
+    const hId = 'hh-' + Date.now();
+    const newHousehold: Household = {
+      id: hId,
+      name: householdName,
+      created_by: store.currentUserId || 'usr-default',
+      created_at: new Date().toISOString(),
+    };
+
+    const newMember: HouseholdMember = {
+      id: 'hm-' + Date.now(),
+      household_id: hId,
+      user_id: store.currentUserId || 'usr-default',
+      role: 'admin',
+      joined_at: new Date().toISOString(),
+    };
+
+    // Update person entry to belong to this household
+    store.people = store.people.map((p) => {
+      if (p.user_id === store.currentUserId) {
+        return { ...p, household_id: hId };
+      }
+      return p;
+    });
+
+    store.households.push(newHousehold);
+    store.members.push(newMember);
+    DataStore.saveStore(store);
+
     router.push('/household/invite');
   };
 
@@ -21,20 +54,20 @@ export default function HouseholdSetupPage() {
             <Home className="w-8 h-8" />
           </div>
           <h1 className="text-2xl font-black text-white mb-1">Configurar tu Espacio</h1>
-          <p className="text-xs text-slate-400">Creá un espacio compartido ("Hogar") para administrar los gastos</p>
+          <p className="text-xs text-slate-400">Creá tu espacio compartido ("Hogar") para administrar tus gastos</p>
         </div>
 
         <form onSubmit={handleCreate} className="space-y-4">
           <div>
             <label className="block text-xs font-bold uppercase text-slate-400 mb-1.5">
-              Nombre del Espacio Compartido
+              Nombre del Espacio Compartido *
             </label>
             <input
               type="text"
               required
               value={householdName}
               onChange={(e) => setHouseholdName(e.target.value)}
-              placeholder="Ej. Hogar Gómez-Rodríguez"
+              placeholder="Ej. Hogar Gómez-Rodríguez, Mi Familia"
               className="w-full px-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 text-sm transition"
             />
           </div>

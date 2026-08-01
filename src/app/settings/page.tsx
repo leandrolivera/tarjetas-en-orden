@@ -51,6 +51,20 @@ export default function GeneralSettingsPage() {
               <li>Las compras en cuotas distribuyen centavos sobrantes sin modificar el importe total original.</li>
             </ul>
           </div>
+
+          <div className="border-t border-slate-800 pt-4">
+            <button
+              onClick={() => {
+                if (confirm('¿Estás seguro de reiniciar todos los datos a un estado limpio (vacío desde cero)?')) {
+                  DataStore.resetToClean();
+                  window.location.href = '/register';
+                }
+              }}
+              className="w-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold py-2.5 px-4 rounded-xl border border-rose-500/30 text-xs transition"
+            >
+              🗑️ Reiniciar todo a estado limpio (Vacío desde 0)
+            </button>
+          </div>
         </div>
       </div>
     </Navigation>

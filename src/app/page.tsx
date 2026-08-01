@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Navigation } from '@/components/Navigation';
 import { CardVisual } from '@/components/CardVisual';
-import { CurrencyDisplay, DualCurrencyView } from '@/components/CurrencyDisplay';
+import { CurrencyDisplay } from '@/components/CurrencyDisplay';
 import { Badge } from '@/components/Badge';
 import { DataStore } from '@/lib/data-store';
 import {
@@ -12,31 +13,59 @@ import {
   DollarSign,
   TrendingUp,
   Calendar,
-  AlertTriangle,
   Receipt,
-  CheckCircle,
   Clock,
-  ArrowUpRight,
   PieChart,
   UserCheck,
   ChevronRight,
   Sparkles,
+  PlusCircle,
+  Home,
 } from 'lucide-react';
-import { format, addMonths, parseISO } from 'date-fns';
+import { format, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [store, setStore] = useState(DataStore.getStore());
 
   useEffect(() => {
-    setStore(DataStore.getStore());
+    const s = DataStore.getStore();
+    setStore(s);
   }, []);
+
+  const activeHousehold = store.households[0];
+  const currentPerson = store.people.find((p) => p.user_id === store.currentUserId) || store.people[0];
+
+  // If no user or household exists yet, prompt onboarding
+  if (!activeHousehold || !currentPerson) {
+    return (
+      <Navigation>
+        <div className="max-w-md mx-auto text-center glass-card p-8 rounded-3xl space-y-4 my-12">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-sky-600 to-emerald-500 flex items-center justify-center font-bold text-3xl text-white mx-auto">
+            💳
+          </div>
+          <h2 className="text-2xl font-black text-white">¡Bienvenido a Tarjetas en Orden!</h2>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Tu panel está listo. Comenzá registrando tu cuenta y tu espacio compartido para cargar tus propias tarjetas y gastos.
+          </p>
+          <Link
+            href="/register"
+            className="inline-flex items-center gap-2 bg-gradient-to-r from-sky-600 to-emerald-500 hover:from-sky-500 hover:to-emerald-400 text-white font-bold py-3 px-6 rounded-2xl text-xs shadow-lg transition"
+          >
+            <span>Crear Mi Cuenta y Hogar</span>
+            <ChevronRight className="w-4 h-4" />
+          </Link>
+        </div>
+      </Navigation>
+    );
+  }
 
   // Compute metrics
   const activeExpenses = store.expenses.filter((e) => !e.archived_at);
   const activeCards = store.cards.filter((c) => c.is_active);
 
-  // Totals for current month (July 2026 / current)
+  // Totals
   const currentMonthARS = activeExpenses
     .filter((e) => e.currency === 'ARS')
     .reduce((sum, e) => sum + e.total_amount, 0);
@@ -47,11 +76,8 @@ export default function DashboardPage() {
 
   const activeCuotasCount = activeExpenses.reduce((sum, e) => sum + e.installments_count, 0);
 
-  // Money Owed to Me (Reimbursements pending where debtor is not current user)
-  const currentPerson = store.people.find((p) => p.user_id === store.currentUserId) || store.people[0];
+  // Reimbursements
   const pendingReimbursements = store.reimbursements.filter((r) => r.status === 'pending');
-
-  // Money I Owe
   const iOweReimbursements = pendingReimbursements.filter((r) => r.debtor_person_id === currentPerson.id);
   const owedToMeReimbursements = pendingReimbursements.filter((r) => r.creditor_person_id === currentPerson.id);
 
@@ -67,7 +93,7 @@ export default function DashboardPage() {
     owedByPersonMap.set(debtor.id, existing);
   });
 
-  // Committed Future Installments Projection (12 Months)
+  // Future Months Projection
   const futureMonthsProjection: Array<{ monthName: string; totalARS: number; totalUSD: number; cuotasCount: number }> = [];
   const baseDate = new Date();
 
@@ -75,7 +101,6 @@ export default function DashboardPage() {
     const targetDate = addMonths(baseDate, i);
     const monthLabel = format(targetDate, 'MMM yyyy', { locale: es });
     
-    // Simulate cuotas distribution
     let monthARS = 0;
     let monthUSD = 0;
     let cuotas = 0;
@@ -97,7 +122,7 @@ export default function DashboardPage() {
     });
   }
 
-  // Category Breakdown for current expenses
+  // Category Breakdown
   const categoryTotalsMap = new Map<string, { category: any; arsAmount: number; usdAmount: number }>();
   activeExpenses.forEach((e) => {
     const cat = store.categories.find((c) => c.id === e.category_id) || {
@@ -124,7 +149,7 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs text-sky-400 font-bold uppercase tracking-wider">Dashboard Familiar</span>
               <span className="bg-sky-500/20 text-sky-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-sky-500/30">
-                Julio / Agosto 2026
+                {activeHousehold.name}
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
@@ -154,10 +179,7 @@ export default function DashboardPage() {
             <div className="mb-2">
               <CurrencyDisplay amount={currentMonthARS} currency="ARS" size="xl" />
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-medium">
-              <TrendingUp className="w-3.5 h-3.5" />
-              <span>Normal respecto al mes anterior</span>
-            </div>
+            <div className="text-[11px] text-slate-400">Total en pesos argentinos</div>
           </div>
 
           <div className="glass-card p-5 rounded-3xl relative overflow-hidden">
@@ -168,9 +190,7 @@ export default function DashboardPage() {
             <div className="mb-2">
               <CurrencyDisplay amount={currentMonthUSD} currency="USD" size="xl" />
             </div>
-            <div className="text-[11px] text-slate-400">
-              USD y ARS se muestran estrictamente separados
-            </div>
+            <div className="text-[11px] text-slate-400">Total en dólares estadounidenses</div>
           </div>
 
           <div className="glass-card p-5 rounded-3xl relative overflow-hidden">
@@ -201,23 +221,78 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* SECTION: TARJETAS Y RESÚMENES */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-lg text-white flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-sky-400" />
+              Tus Tarjetas de Crédito y Cierres
+            </h2>
+            <Link href="/cards/new" className="text-xs text-sky-400 hover:underline font-semibold flex items-center gap-1">
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>+ Agregar Tarjeta</span>
+            </Link>
+          </div>
+
+          {activeCards.length === 0 ? (
+            <div className="glass-card p-8 rounded-3xl text-center space-y-3">
+              <CreditCard className="w-10 h-10 text-slate-600 mx-auto" />
+              <h3 className="font-bold text-white text-sm">Todavía no agregaste ninguna tarjeta</h3>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                Crea tu primera tarjeta indicando el banco, titular, días de cierre y vencimiento.
+              </p>
+              <Link
+                href="/cards/new"
+                className="inline-flex items-center gap-2 bg-sky-600 hover:bg-sky-500 text-white font-bold py-2.5 px-4 rounded-xl text-xs transition shadow-lg"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>Crear Primera Tarjeta</span>
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {activeCards.map((card) => {
+                const stmt = store.statements.find((s) => s.card_id === card.id);
+                return (
+                  <div key={card.id} className="space-y-3">
+                    <CardVisual card={card} />
+                    <div className="glass-card p-4 rounded-2xl text-xs space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">Estado Resumen:</span>
+                        {stmt?.status === 'paid' ? (
+                          <Badge variant="green">Pagado ✓</Badge>
+                        ) : (
+                          <Badge variant="yellow">Pendiente</Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between border-t border-slate-800 pt-2">
+                        <span className="text-slate-400">Próximo Cierre:</span>
+                        <span className="font-bold text-white">Día {card.default_closing_day}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">Próximo Vencimiento:</span>
+                        <span className="font-bold text-amber-400">Día {card.default_due_day}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* SECTION: DINERO QUE ME DEBEN & YO DEBO */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Dinero que me deben */}
           <div className="glass-card p-6 rounded-3xl">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-bold text-base text-white flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
                 Dinero que me deben
               </h2>
-              <Link href="/reimbursements/pending" className="text-xs text-sky-400 hover:underline">
-                Ver todos
-              </Link>
             </div>
-
             {owedByPersonMap.size === 0 ? (
               <div className="bg-slate-900/60 rounded-2xl p-6 text-center text-xs text-slate-400">
-                👍 ¡Excelente! Nadie te debe dinero actualmente.
+                👍 Nadie te debe dinero actualmente.
               </div>
             ) : (
               <div className="space-y-3">
@@ -237,7 +312,6 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Dinero que yo debo */}
           <div className="glass-card p-6 rounded-3xl">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-bold text-base text-white flex items-center gap-2">
@@ -245,7 +319,6 @@ export default function DashboardPage() {
                 Dinero que yo debo
               </h2>
             </div>
-
             {iOweReimbursements.length === 0 ? (
               <div className="bg-slate-900/60 rounded-2xl p-6 text-center text-xs text-slate-400">
                 🎉 No tenés deudas pendientes de devolución.
@@ -270,49 +343,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* SECTION: TARJETAS Y RESÚMENES */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-bold text-lg text-white flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-sky-400" />
-              Tus Tarjetas de Crédito y Cierres
-            </h2>
-            <Link href="/cards" className="text-xs text-sky-400 hover:underline">
-              Administrar tarjetas
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {activeCards.map((card) => {
-              const stmt = store.statements.find((s) => s.card_id === card.id);
-              return (
-                <div key={card.id} className="space-y-3">
-                  <CardVisual card={card} />
-                  <div className="glass-card p-4 rounded-2xl text-xs space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400">Estado Resumen:</span>
-                      {stmt?.status === 'paid' ? (
-                        <Badge variant="green">Pagado ✓</Badge>
-                      ) : (
-                        <Badge variant="yellow">Pendiente</Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between border-t border-slate-800 pt-2">
-                      <span className="text-slate-400">Próximo Cierre:</span>
-                      <span className="font-bold text-white">Día {card.default_closing_day}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400">Próximo Vencimiento:</span>
-                      <span className="font-bold text-amber-400">Día {card.default_due_day}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* SECTION: PROYECCIÓN DE CUOTAS FUTURAS (12 MESES) */}
+        {/* SECTION: PROYECCIÓN DE CUOTAS FUTURAS */}
         <div className="glass-card p-6 rounded-3xl space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-bold text-base text-white flex items-center gap-2">
@@ -338,27 +369,6 @@ export default function DashboardPage() {
                   </span>
                 )}
                 <span className="text-[9px] text-slate-400 block">{proj.cuotasCount} cuotas</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* SECTION: GASTOS POR CATEGORÍA */}
-        <div className="glass-card p-6 rounded-3xl">
-          <h2 className="font-bold text-base text-white mb-4 flex items-center gap-2">
-            <PieChart className="w-5 h-5 text-amber-400" />
-            Distribución por Categoría
-          </h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-            {Array.from(categoryTotalsMap.values()).map(({ category, arsAmount, usdAmount }) => (
-              <div key={category.id} className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: category.color || '#0284c7' }} />
-                  <span className="font-bold text-xs text-white">{category.name}</span>
-                </div>
-                {arsAmount > 0 && <CurrencyDisplay amount={arsAmount} currency="ARS" size="sm" />}
-                {usdAmount > 0 && <CurrencyDisplay amount={usdAmount} currency="USD" size="sm" />}
               </div>
             ))}
           </div>
