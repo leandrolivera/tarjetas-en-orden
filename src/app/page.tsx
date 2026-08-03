@@ -18,12 +18,9 @@ import {
   Sparkles,
   PlusCircle,
   CheckCircle2,
-  Circle,
-  CheckSquare,
-  Square,
   ShieldCheck,
 } from 'lucide-react';
-import { format, addMonths } from 'date-fns';
+import { format, addMonths, parseISO, isSameMonth, isAfter } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 export default function DashboardPage() {
@@ -62,10 +59,16 @@ export default function DashboardPage() {
     );
   }
 
-  // Handle 1-Tap Checkbox Payment Toggle directly from Dashboard
-  const handleTogglePayment = (expenseId: string) => {
-    const updatedStore = DataStore.toggleExpensePaymentStatus(expenseId);
-    setStore({ ...updatedStore });
+  // Handle 1-Tap Checkbox Payment Toggle with confirmation modal
+  const handleTogglePayment = (expenseId: string, isCurrentlyPaid?: boolean) => {
+    const confirmMessage = isCurrentlyPaid
+      ? '¿Deseás anular el check y volver a marcar este gasto como pendiente de pago?'
+      : '¿Confirmás que se realizó el pago de este gasto?';
+
+    if (window.confirm(confirmMessage)) {
+      const updatedStore = DataStore.toggleExpensePaymentStatus(expenseId);
+      setStore({ ...updatedStore });
+    }
   };
 
   const activeExpenses = (store.expenses || []).filter((e) => !e.archived_at);
@@ -82,24 +85,40 @@ export default function DashboardPage() {
     .filter((e) => e.currency === 'USD')
     .reduce((sum, e) => sum + e.total_amount, 0);
 
-  // Future Months Projection
+  // Future Months Projection (Includes ALL expenses, 1-payment or cuotas, 50/50, own or partner)
   const futureMonthsProjection: Array<{ monthName: string; totalARS: number; totalUSD: number; cuotasCount: number }> = [];
   const baseDate = new Date();
 
   for (let i = 0; i < 12; i++) {
-    const targetDate = addMonths(baseDate, i);
-    const monthLabel = format(targetDate, 'MMM yyyy', { locale: es });
-    
+    const targetMonthDate = addMonths(baseDate, i);
+    const monthLabel = format(targetMonthDate, 'MMM yyyy', { locale: es });
+
     let monthARS = 0;
     let monthUSD = 0;
     let cuotas = 0;
 
-    pendingExpenses.forEach((exp) => {
-      if (exp.installments_count > 1) {
-        const perCuota = exp.total_amount / exp.installments_count;
-        if (exp.currency === 'ARS') monthARS += perCuota;
-        if (exp.currency === 'USD') monthUSD += perCuota;
-        cuotas += 1;
+    activeExpenses.forEach((exp) => {
+      let pDate = new Date();
+      try {
+        if (exp.purchase_date) pDate = parseISO(exp.purchase_date);
+      } catch (e) {}
+
+      const count = exp.installments_count || 1;
+      const perInstallment = exp.total_amount / count;
+
+      // Check if targetMonthDate falls within the installment range
+      for (let instIdx = 0; instIdx < count; instIdx++) {
+        const installmentMonthDate = addMonths(pDate, instIdx);
+
+        // If target month matches or if it's past due in the current month index 0
+        if (
+          isSameMonth(targetMonthDate, installmentMonthDate) ||
+          (i === 0 && isAfter(baseDate, installmentMonthDate) && !isSameMonth(baseDate, installmentMonthDate))
+        ) {
+          if (exp.currency === 'ARS') monthARS += perInstallment;
+          if (exp.currency === 'USD') monthUSD += perInstallment;
+          cuotas += 1;
+        }
       }
     });
 
@@ -299,7 +318,7 @@ export default function DashboardPage() {
                     {/* Left: Interactive 1-Tap Checkbox */}
                     <button
                       type="button"
-                      onClick={() => handleTogglePayment(exp.id)}
+                      onClick={() => handleTogglePayment(exp.id, exp.is_paid)}
                       className="flex items-center gap-3 focus:outline-none text-left group"
                     >
                       <div
@@ -320,6 +339,8 @@ export default function DashboardPage() {
                           <span>{exp.merchant}</span>
                           <span>•</span>
                           <span>{card?.name || 'Tarjeta'}</span>
+                          <span>•</span>
+                          <span>Pagó: <b>{purchaser?.name || 'Titular'}</b></span>
                           {exp.installments_count > 1 && (
                             <>
                               <span>•</span>
@@ -336,7 +357,7 @@ export default function DashboardPage() {
 
                       <button
                         type="button"
-                        onClick={() => handleTogglePayment(exp.id)}
+                        onClick={() => handleTogglePayment(exp.id, exp.is_paid)}
                         className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
                           exp.is_paid
                             ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
@@ -360,7 +381,7 @@ export default function DashboardPage() {
               <Calendar className="w-5 h-5 text-sky-400" />
               Compromisos de Cuotas Futuras (Próximos 12 meses)
             </h2>
-            <span className="text-xs text-slate-400">Proyección mensual</span>
+            <span className="text-xs text-slate-400">Proyección mensual de compras y cuotas</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
@@ -378,7 +399,7 @@ export default function DashboardPage() {
                     USD {proj.totalUSD}
                   </span>
                 )}
-                <span className="text-[9px] text-slate-400 block">{proj.cuotasCount} cuotas</span>
+                <span className="text-[9px] text-slate-400 block">{proj.cuotasCount} ítem(s)</span>
               </div>
             ))}
           </div>

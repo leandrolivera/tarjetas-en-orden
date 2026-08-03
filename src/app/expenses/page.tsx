@@ -28,9 +28,15 @@ export default function ExpenseListPage() {
     setStore(DataStore.getStore());
   }, []);
 
-  const handleTogglePayment = (expenseId: string) => {
-    const updatedStore = DataStore.toggleExpensePaymentStatus(expenseId);
-    setStore({ ...updatedStore });
+  const handleTogglePayment = (expenseId: string, isCurrentlyPaid?: boolean) => {
+    const confirmMessage = isCurrentlyPaid
+      ? '¿Deseás anular el check y volver a marcar este gasto como pendiente de pago?'
+      : '¿Confirmás que se realizó el pago de este gasto?';
+
+    if (window.confirm(confirmMessage)) {
+      const updatedStore = DataStore.toggleExpensePaymentStatus(expenseId);
+      setStore({ ...updatedStore });
+    }
   };
 
   const filteredExpenses = (store.expenses || [])
