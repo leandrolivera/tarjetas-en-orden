@@ -8,6 +8,7 @@ import { CurrencyDisplay } from '@/components/CurrencyDisplay';
 import { Badge } from '@/components/Badge';
 import { DataStore } from '@/lib/data-store';
 import { Expense, Card } from '@/lib/types';
+import { calculateInstallments } from '@/lib/installments';
 import {
   CreditCard,
   DollarSign,
@@ -20,7 +21,7 @@ import {
   CheckCircle2,
   ShieldCheck,
 } from 'lucide-react';
-import { format, addMonths, parseISO, isSameMonth, isAfter } from 'date-fns';
+import { format, addMonths, parseISO, isSameMonth, startOfMonth, getDate } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 export default function DashboardPage() {
@@ -76,21 +77,63 @@ export default function DashboardPage() {
   const paidExpenses = activeExpenses.filter((e) => e.is_paid);
   const activeCards = (store.cards || []).filter((c) => c.is_active);
 
-  // Totals to Pay (Pending)
-  const pendingAmountARS = pendingExpenses
-    .filter((e) => e.currency === 'ARS')
-    .reduce((sum, e) => sum + e.total_amount, 0);
-
-  const pendingAmountUSD = pendingExpenses
-    .filter((e) => e.currency === 'USD')
-    .reduce((sum, e) => sum + e.total_amount, 0);
-
-  // Future Months Projection (Includes ALL expenses, 1-payment or cuotas, 50/50, own or partner)
-  const futureMonthsProjection: Array<{ monthName: string; totalARS: number; totalUSD: number; cuotasCount: number }> = [];
   const baseDate = new Date();
+  const currentMonthStart = startOfMonth(baseDate);
+
+  // Helper to calculate exact installment schedules for an expense
+  const getExpenseInstallmentSchedule = (exp: Expense) => {
+    let pDate = new Date();
+    try {
+      if (exp.purchase_date) pDate = parseISO(exp.purchase_date);
+    } catch (e) {}
+
+    const card = activeCards.find((c) => c.id === exp.card_id);
+    const closingDay = card?.default_closing_day || 25;
+    const pDay = getDate(pDate);
+
+    // If purchase day is after closing day, 1st installment starts next month
+    let firstDueMonth = pDate;
+    if (pDay > closingDay) {
+      firstDueMonth = addMonths(pDate, 1);
+    }
+    const firstDueDateStr = format(firstDueMonth, 'yyyy-MM-dd');
+
+    return calculateInstallments(
+      exp.total_amount,
+      exp.installments_count || 1,
+      exp.currency,
+      firstDueDateStr
+    );
+  };
+
+  // 1. Calculate THIS MONTH'S installment amounts (A PAGAR ESTE MES) vs Total Remaining
+  let thisMonthARS = 0;
+  let thisMonthUSD = 0;
+
+  let totalPendingRemainingARS = 0;
+  let totalPendingRemainingUSD = 0;
+
+  pendingExpenses.forEach((exp) => {
+    if (exp.currency === 'ARS') totalPendingRemainingARS += exp.total_amount;
+    if (exp.currency === 'USD') totalPendingRemainingUSD += exp.total_amount;
+
+    const schedule = getExpenseInstallmentSchedule(exp);
+    schedule.forEach((inst) => {
+      try {
+        const instDate = parseISO(inst.due_date);
+        if (isSameMonth(instDate, currentMonthStart)) {
+          if (exp.currency === 'ARS') thisMonthARS += inst.amount;
+          if (exp.currency === 'USD') thisMonthUSD += inst.amount;
+        }
+      } catch (e) {}
+    });
+  });
+
+  // 2. Future Months Projection (12 Months)
+  const futureMonthsProjection: Array<{ monthName: string; totalARS: number; totalUSD: number; cuotasCount: number }> = [];
 
   for (let i = 0; i < 12; i++) {
-    const targetMonthDate = addMonths(baseDate, i);
+    const targetMonthDate = addMonths(currentMonthStart, i);
     const monthLabel = format(targetMonthDate, 'MMM yyyy', { locale: es });
 
     let monthARS = 0;
@@ -98,28 +141,17 @@ export default function DashboardPage() {
     let cuotas = 0;
 
     activeExpenses.forEach((exp) => {
-      let pDate = new Date();
-      try {
-        if (exp.purchase_date) pDate = parseISO(exp.purchase_date);
-      } catch (e) {}
-
-      const count = exp.installments_count || 1;
-      const perInstallment = exp.total_amount / count;
-
-      // Check if targetMonthDate falls within the installment range
-      for (let instIdx = 0; instIdx < count; instIdx++) {
-        const installmentMonthDate = addMonths(pDate, instIdx);
-
-        // If target month matches or if it's past due in the current month index 0
-        if (
-          isSameMonth(targetMonthDate, installmentMonthDate) ||
-          (i === 0 && isAfter(baseDate, installmentMonthDate) && !isSameMonth(baseDate, installmentMonthDate))
-        ) {
-          if (exp.currency === 'ARS') monthARS += perInstallment;
-          if (exp.currency === 'USD') monthUSD += perInstallment;
-          cuotas += 1;
-        }
-      }
+      const schedule = getExpenseInstallmentSchedule(exp);
+      schedule.forEach((inst) => {
+        try {
+          const instDate = parseISO(inst.due_date);
+          if (isSameMonth(instDate, targetMonthDate)) {
+            if (exp.currency === 'ARS') monthARS += inst.amount;
+            if (exp.currency === 'USD') monthUSD += inst.amount;
+            cuotas += 1;
+          }
+        } catch (e) {}
+      });
     });
 
     futureMonthsProjection.push({
@@ -146,7 +178,7 @@ export default function DashboardPage() {
               Hola, {currentPerson.name} 👋
             </h1>
             <p className="text-xs text-slate-400 mt-1">
-              Marcá tus gastos como pagados con 1 toque o consultá tus próximos vencimientos
+              En grande ves lo que vence <b>este mes</b> y en pequeño el saldo total acumulado
             </p>
           </div>
 
@@ -159,56 +191,62 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        {/* TOP STAT CARDS (A PAGAR) */}
+        {/* TOP STAT CARDS (A PAGAR ESTE MES vs SALDO TOTAL) */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="glass-card p-5 rounded-3xl relative overflow-hidden border border-sky-500/30">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-              <span className="font-semibold uppercase tracking-wider text-sky-400">A Pagar (ARS)</span>
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+              <span className="font-bold uppercase tracking-wider text-sky-400">A Pagar Este Mes (ARS)</span>
               <Receipt className="w-4 h-4 text-sky-400" />
             </div>
-            <div className="mb-2">
-              <CurrencyDisplay amount={pendingAmountARS} currency="ARS" size="xl" />
+            <div className="mb-1">
+              <CurrencyDisplay amount={thisMonthARS} currency="ARS" size="xl" />
             </div>
-            <div className="text-[11px] text-slate-400">Total de gastos pendientes en pesos</div>
+            <div className="text-[11px] text-slate-400 flex items-center gap-1">
+              <span>Saldo total restante:</span>
+              <b className="text-slate-200">${totalPendingRemainingARS.toLocaleString('es-AR')}</b>
+            </div>
           </div>
 
           <div className="glass-card p-5 rounded-3xl relative overflow-hidden border border-emerald-500/30">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-              <span className="font-semibold uppercase tracking-wider text-emerald-400">A Pagar (USD)</span>
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+              <span className="font-bold uppercase tracking-wider text-emerald-400">A Pagar Este Mes (USD)</span>
               <DollarSign className="w-4 h-4 text-emerald-400" />
             </div>
-            <div className="mb-2">
-              <CurrencyDisplay amount={pendingAmountUSD} currency="USD" size="xl" />
+            <div className="mb-1">
+              <CurrencyDisplay amount={thisMonthUSD} currency="USD" size="xl" />
             </div>
-            <div className="text-[11px] text-slate-400">Total de gastos pendientes en dólares</div>
+            <div className="text-[11px] text-slate-400 flex items-center gap-1">
+              <span>Saldo total restante:</span>
+              <b className="text-slate-200">USD {totalPendingRemainingUSD.toLocaleString('es-AR')}</b>
+            </div>
           </div>
 
           <div className="glass-card p-5 rounded-3xl relative overflow-hidden">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-              <span className="font-semibold uppercase tracking-wider text-amber-400">Pendientes</span>
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+              <span className="font-bold uppercase tracking-wider text-amber-400">Gastos Pendientes</span>
               <Clock className="w-4 h-4 text-amber-400" />
             </div>
             <div className="text-2xl font-black text-white mb-1">
-              {pendingExpenses.length} <span className="text-xs font-normal text-slate-400">por pagar</span>
+              {pendingExpenses.length} <span className="text-xs font-normal text-slate-400">activos</span>
             </div>
             <div className="text-[11px] text-slate-400">
-              {pendingExpenses.reduce((s, e) => s + e.installments_count, 0)} cuotas activas
+              {pendingExpenses.reduce((s, e) => s + (e.installments_count || 1), 0)} cuotas vigentes
             </div>
           </div>
 
           <div className="glass-card p-5 rounded-3xl relative overflow-hidden">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-              <span className="font-semibold uppercase tracking-wider text-emerald-400">Pagados este mes</span>
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+              <span className="font-bold uppercase tracking-wider text-emerald-400">Pagados Este Mes</span>
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="text-2xl font-black text-emerald-400 mb-1">
               {paidExpenses.length} <span className="text-xs font-normal text-slate-400">completados</span>
             </div>
-            <span className="text-[11px] text-slate-400 block">Marcados con 1-tap ✓</span>
+            <span className="text-[11px] text-slate-400 block">Marcados con check ✓</span>
           </div>
         </div>
 
-        {/* SECTION 1: A PAGAR POR TARJETA */}
+        {/* SECTION 1: A PAGAR POR TARJETA DE CRÉDITO */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-bold text-lg text-white flex items-center gap-2">
@@ -240,34 +278,55 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {activeCards.map((card) => {
                 const cardExpenses = pendingExpenses.filter((e) => e.card_id === card.id);
-                const cardPendingARS = cardExpenses
-                  .filter((e) => e.currency === 'ARS')
-                  .reduce((sum, e) => sum + e.total_amount, 0);
+                
+                // Calculate THIS MONTH'S installment sum for this card
+                let cardThisMonthARS = 0;
+                let cardThisMonthUSD = 0;
+                let cardTotalRemainingARS = 0;
+                let cardTotalRemainingUSD = 0;
 
-                const cardPendingUSD = cardExpenses
-                  .filter((e) => e.currency === 'USD')
-                  .reduce((sum, e) => sum + e.total_amount, 0);
+                cardExpenses.forEach((exp) => {
+                  if (exp.currency === 'ARS') cardTotalRemainingARS += exp.total_amount;
+                  if (exp.currency === 'USD') cardTotalRemainingUSD += exp.total_amount;
+
+                  const schedule = getExpenseInstallmentSchedule(exp);
+                  schedule.forEach((inst) => {
+                    try {
+                      if (isSameMonth(parseISO(inst.due_date), currentMonthStart)) {
+                        if (exp.currency === 'ARS') cardThisMonthARS += inst.amount;
+                        if (exp.currency === 'USD') cardThisMonthUSD += inst.amount;
+                      }
+                    } catch (e) {}
+                  });
+                });
 
                 return (
                   <div key={card.id} className="space-y-3">
                     <CardVisual card={card} />
-                    <div className="glass-card p-4 rounded-2xl text-xs space-y-2">
-                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                        <span className="text-slate-400 font-bold uppercase text-[10px]">Total a Pagar:</span>
-                        <div className="text-right">
-                          <CurrencyDisplay amount={cardPendingARS} currency="ARS" size="md" />
-                          {cardPendingUSD > 0 && (
+                    <div className="glass-card p-4 rounded-2xl text-xs space-y-2.5">
+                      <div className="flex items-start justify-between border-b border-slate-800 pb-2">
+                        <div>
+                          <span className="text-sky-400 font-bold uppercase text-[10px] block">A Pagar Este Mes:</span>
+                          <CurrencyDisplay amount={cardThisMonthARS} currency="ARS" size="md" />
+                          {cardThisMonthUSD > 0 && (
                             <div className="mt-0.5">
-                              <CurrencyDisplay amount={cardPendingUSD} currency="USD" size="md" />
+                              <CurrencyDisplay amount={cardThisMonthUSD} currency="USD" size="md" />
                             </div>
                           )}
                         </div>
+                        <div className="text-right">
+                          <span className="text-slate-500 text-[10px] block">Saldo Total Tarjeta:</span>
+                          <span className="font-semibold text-slate-300 text-xs">
+                            ${cardTotalRemainingARS.toLocaleString('es-AR')}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between">
+
+                      <div className="flex items-center justify-between text-[11px]">
                         <span className="text-slate-400">Día de Cierre:</span>
                         <span className="font-bold text-white">Día {card.default_closing_day}</span>
                       </div>
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between text-[11px]">
                         <span className="text-slate-400">Próximo Vencimiento:</span>
                         <span className="font-bold text-amber-400">Día {card.default_due_day}</span>
                       </div>
@@ -279,7 +338,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* SECTION 2: GASTOS A PAGAR (CHECK RÁPIDO 1-TAP) */}
+        {/* SECTION 2: GASTOS PENDIENTES Y PAGOS (CHECK 1-TAP) */}
         <div className="glass-card p-6 rounded-3xl space-y-4">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <div>
@@ -288,7 +347,7 @@ export default function DashboardPage() {
                 Gastos Pendientes y Pagos (Check 1-Tap)
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Tocá la casilla de verificación en cualquier gasto para marcarlo como pagado al instante
+                Tocá la casilla de verificación para marcar un gasto como pagado con confirmación
               </p>
             </div>
             <Link href="/expenses/new" className="text-xs text-sky-400 hover:underline font-semibold">
@@ -305,6 +364,20 @@ export default function DashboardPage() {
               {activeExpenses.map((exp) => {
                 const card = activeCards.find((c) => c.id === exp.card_id);
                 const purchaser = (store.people || []).find((p) => p.id === exp.purchaser_id);
+
+                // Compute this month's installment for this expense
+                const schedule = getExpenseInstallmentSchedule(exp);
+                const currentMonthInst = schedule.find((inst) => {
+                  try {
+                    return isSameMonth(parseISO(inst.due_date), currentMonthStart);
+                  } catch (e) {
+                    return false;
+                  }
+                });
+
+                const count = exp.installments_count || 1;
+                const thisMonthInstallmentAmount = currentMonthInst ? currentMonthInst.amount : exp.total_amount / count;
+                const instNumber = currentMonthInst ? currentMonthInst.installment_number : 1;
 
                 return (
                   <div
@@ -341,19 +414,27 @@ export default function DashboardPage() {
                           <span>{card?.name || 'Tarjeta'}</span>
                           <span>•</span>
                           <span>Pagó: <b>{purchaser?.name || 'Titular'}</b></span>
-                          {exp.installments_count > 1 && (
+                          {count > 1 && (
                             <>
                               <span>•</span>
-                              <span className="text-sky-400 font-semibold">{exp.installments_count} cuotas</span>
+                              <span className="text-sky-400 font-semibold">Cuota {instNumber} de {count}</span>
                             </>
                           )}
                         </div>
                       </div>
                     </button>
 
-                    {/* Right: Amount & Status Badge */}
-                    <div className="flex items-center gap-3">
-                      <CurrencyDisplay amount={exp.total_amount} currency={exp.currency} size="md" />
+                    {/* Right: Amount (This Month BIG, Total SMALL) & Status Button */}
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <span className="text-[10px] text-slate-400 block font-medium">Cuota de este mes:</span>
+                        <CurrencyDisplay amount={thisMonthInstallmentAmount} currency={exp.currency} size="md" />
+                        {count > 1 && (
+                          <span className="text-[10px] text-slate-400 block mt-0.5">
+                            Total compra: ${exp.total_amount.toLocaleString('es-AR')}
+                          </span>
+                        )}
+                      </div>
 
                       <button
                         type="button"
@@ -381,7 +462,7 @@ export default function DashboardPage() {
               <Calendar className="w-5 h-5 text-sky-400" />
               Compromisos de Cuotas Futuras (Próximos 12 meses)
             </h2>
-            <span className="text-xs text-slate-400">Proyección mensual de compras y cuotas</span>
+            <span className="text-xs text-slate-400">Proyección exacta mes por mes</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
