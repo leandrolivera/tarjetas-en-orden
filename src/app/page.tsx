@@ -2,56 +2,57 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Navigation } from '@/components/Navigation';
 import { CardVisual } from '@/components/CardVisual';
 import { CurrencyDisplay } from '@/components/CurrencyDisplay';
 import { Badge } from '@/components/Badge';
 import { DataStore } from '@/lib/data-store';
+import { Expense, Card } from '@/lib/types';
 import {
   CreditCard,
   DollarSign,
-  TrendingUp,
   Calendar,
   Receipt,
   Clock,
-  PieChart,
-  UserCheck,
   ChevronRight,
   Sparkles,
   PlusCircle,
-  Home,
+  CheckCircle2,
+  Circle,
+  CheckSquare,
+  Square,
+  ShieldCheck,
 } from 'lucide-react';
 import { format, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 export default function DashboardPage() {
-  const router = useRouter();
   const [store, setStore] = useState(DataStore.getStore());
 
   useEffect(() => {
-    const s = DataStore.getStore();
-    setStore(s);
+    setStore(DataStore.getStore());
   }, []);
 
-  const activeHousehold = store.households[0];
-  const currentPerson = store.people.find((p) => p.user_id === store.currentUserId) || store.people[0];
+  const activeHousehold = store.households && store.households.length > 0 ? store.households[0] : null;
+  const currentPerson = store.people && store.people.length > 0
+    ? store.people.find((p) => p.user_id === store.currentUserId) || store.people[0]
+    : null;
 
-  // If no user or household exists yet, prompt onboarding
+  // Onboarding view if no user / household registered yet
   if (!activeHousehold || !currentPerson) {
     return (
       <Navigation>
         <div className="max-w-md mx-auto text-center glass-card p-8 rounded-3xl space-y-4 my-12">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-sky-600 to-emerald-500 flex items-center justify-center font-bold text-3xl text-white mx-auto">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-sky-600 to-emerald-500 flex items-center justify-center font-bold text-3xl text-white mx-auto shadow-xl">
             💳
           </div>
           <h2 className="text-2xl font-black text-white">¡Bienvenido a Tarjetas en Orden!</h2>
           <p className="text-xs text-slate-400 leading-relaxed">
-            Tu panel está listo. Comenzá registrando tu cuenta y tu espacio compartido para cargar tus propias tarjetas y gastos.
+            Tu sistema de control de gastos está listo. Registrá tu usuario y tu espacio compartido para cargar tus propias tarjetas y movimientos.
           </p>
           <Link
             href="/register"
-            className="inline-flex items-center gap-2 bg-gradient-to-r from-sky-600 to-emerald-500 hover:from-sky-500 hover:to-emerald-400 text-white font-bold py-3 px-6 rounded-2xl text-xs shadow-lg transition"
+            className="inline-flex items-center gap-2 bg-gradient-to-r from-sky-600 to-emerald-500 hover:from-sky-500 hover:to-emerald-400 text-white font-bold py-3 px-6 rounded-2xl text-xs shadow-lg transition transform hover:-translate-y-0.5"
           >
             <span>Crear Mi Cuenta y Hogar</span>
             <ChevronRight className="w-4 h-4" />
@@ -61,37 +62,25 @@ export default function DashboardPage() {
     );
   }
 
-  // Compute metrics
-  const activeExpenses = store.expenses.filter((e) => !e.archived_at);
-  const activeCards = store.cards.filter((c) => c.is_active);
+  // Handle 1-Tap Checkbox Payment Toggle directly from Dashboard
+  const handleTogglePayment = (expenseId: string) => {
+    const updatedStore = DataStore.toggleExpensePaymentStatus(expenseId);
+    setStore({ ...updatedStore });
+  };
 
-  // Totals
-  const currentMonthARS = activeExpenses
+  const activeExpenses = (store.expenses || []).filter((e) => !e.archived_at);
+  const pendingExpenses = activeExpenses.filter((e) => !e.is_paid);
+  const paidExpenses = activeExpenses.filter((e) => e.is_paid);
+  const activeCards = (store.cards || []).filter((c) => c.is_active);
+
+  // Totals to Pay (Pending)
+  const pendingAmountARS = pendingExpenses
     .filter((e) => e.currency === 'ARS')
     .reduce((sum, e) => sum + e.total_amount, 0);
 
-  const currentMonthUSD = activeExpenses
+  const pendingAmountUSD = pendingExpenses
     .filter((e) => e.currency === 'USD')
     .reduce((sum, e) => sum + e.total_amount, 0);
-
-  const activeCuotasCount = activeExpenses.reduce((sum, e) => sum + e.installments_count, 0);
-
-  // Reimbursements
-  const pendingReimbursements = store.reimbursements.filter((r) => r.status === 'pending');
-  const iOweReimbursements = pendingReimbursements.filter((r) => r.debtor_person_id === currentPerson.id);
-  const owedToMeReimbursements = pendingReimbursements.filter((r) => r.creditor_person_id === currentPerson.id);
-
-  // Group Owed To Me by Person
-  const owedByPersonMap = new Map<string, { person: any; count: number; totalARS: number; totalUSD: number }>();
-  owedToMeReimbursements.forEach((r) => {
-    const debtor = store.people.find((p) => p.id === r.debtor_person_id);
-    if (!debtor) return;
-    const existing = owedByPersonMap.get(debtor.id) || { person: debtor, count: 0, totalARS: 0, totalUSD: 0 };
-    existing.count += 1;
-    if (r.currency === 'ARS') existing.totalARS += r.amount;
-    if (r.currency === 'USD') existing.totalUSD += r.amount;
-    owedByPersonMap.set(debtor.id, existing);
-  });
 
   // Future Months Projection
   const futureMonthsProjection: Array<{ monthName: string; totalARS: number; totalUSD: number; cuotasCount: number }> = [];
@@ -105,7 +94,7 @@ export default function DashboardPage() {
     let monthUSD = 0;
     let cuotas = 0;
 
-    activeExpenses.forEach((exp) => {
+    pendingExpenses.forEach((exp) => {
       if (exp.installments_count > 1) {
         const perCuota = exp.total_amount / exp.installments_count;
         if (exp.currency === 'ARS') monthARS += perCuota;
@@ -122,24 +111,6 @@ export default function DashboardPage() {
     });
   }
 
-  // Category Breakdown
-  const categoryTotalsMap = new Map<string, { category: any; arsAmount: number; usdAmount: number }>();
-  activeExpenses.forEach((e) => {
-    const cat = store.categories.find((c) => c.id === e.category_id) || {
-      id: 'cat-otros',
-      name: 'Otros',
-      color: '#64748b',
-      icon: 'more-horizontal',
-      is_active: true,
-      is_default: true,
-      created_at: '',
-    };
-    const existing = categoryTotalsMap.get(cat.id) || { category: cat, arsAmount: 0, usdAmount: 0 };
-    if (e.currency === 'ARS') existing.arsAmount += e.total_amount;
-    if (e.currency === 'USD') existing.usdAmount += e.total_amount;
-    categoryTotalsMap.set(cat.id, existing);
-  });
-
   return (
     <Navigation>
       <div className="space-y-6">
@@ -147,7 +118,7 @@ export default function DashboardPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-slate-900 to-sky-950/40 p-6 rounded-3xl border border-slate-800 shadow-xl">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs text-sky-400 font-bold uppercase tracking-wider">Dashboard Familiar</span>
+              <span className="text-xs text-sky-400 font-bold uppercase tracking-wider">Control de Pagos</span>
               <span className="bg-sky-500/20 text-sky-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-sky-500/30">
                 {activeHousehold.name}
               </span>
@@ -156,7 +127,7 @@ export default function DashboardPage() {
               Hola, {currentPerson.name} 👋
             </h1>
             <p className="text-xs text-slate-400 mt-1">
-              Aquí tenés el control en tiempo real de tus tarjetas y devoluciones
+              Marcá tus gastos como pagados con 1 toque o consultá tus próximos vencimientos
             </p>
           </div>
 
@@ -169,64 +140,61 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        {/* TOP STAT CARDS (RESUMEN DEL MES) */}
+        {/* TOP STAT CARDS (A PAGAR) */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="glass-card p-5 rounded-3xl relative overflow-hidden">
+          <div className="glass-card p-5 rounded-3xl relative overflow-hidden border border-sky-500/30">
             <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-              <span className="font-semibold">Gastos Totales (ARS)</span>
+              <span className="font-semibold uppercase tracking-wider text-sky-400">A Pagar (ARS)</span>
               <Receipt className="w-4 h-4 text-sky-400" />
             </div>
             <div className="mb-2">
-              <CurrencyDisplay amount={currentMonthARS} currency="ARS" size="xl" />
+              <CurrencyDisplay amount={pendingAmountARS} currency="ARS" size="xl" />
             </div>
-            <div className="text-[11px] text-slate-400">Total en pesos argentinos</div>
+            <div className="text-[11px] text-slate-400">Total de gastos pendientes en pesos</div>
           </div>
 
-          <div className="glass-card p-5 rounded-3xl relative overflow-hidden">
+          <div className="glass-card p-5 rounded-3xl relative overflow-hidden border border-emerald-500/30">
             <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-              <span className="font-semibold">Gastos Totales (USD)</span>
+              <span className="font-semibold uppercase tracking-wider text-emerald-400">A Pagar (USD)</span>
               <DollarSign className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="mb-2">
-              <CurrencyDisplay amount={currentMonthUSD} currency="USD" size="xl" />
+              <CurrencyDisplay amount={pendingAmountUSD} currency="USD" size="xl" />
             </div>
-            <div className="text-[11px] text-slate-400">Total en dólares estadounidenses</div>
+            <div className="text-[11px] text-slate-400">Total de gastos pendientes en dólares</div>
           </div>
 
           <div className="glass-card p-5 rounded-3xl relative overflow-hidden">
             <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-              <span className="font-semibold">Movimientos</span>
+              <span className="font-semibold uppercase tracking-wider text-amber-400">Pendientes</span>
               <Clock className="w-4 h-4 text-amber-400" />
             </div>
             <div className="text-2xl font-black text-white mb-1">
-              {activeExpenses.length} <span className="text-xs font-normal text-slate-400">registrados</span>
+              {pendingExpenses.length} <span className="text-xs font-normal text-slate-400">por pagar</span>
             </div>
             <div className="text-[11px] text-slate-400">
-              {activeCuotasCount} cuotas activas en total
+              {pendingExpenses.reduce((s, e) => s + e.installments_count, 0)} cuotas activas
             </div>
           </div>
 
           <div className="glass-card p-5 rounded-3xl relative overflow-hidden">
             <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-              <span className="font-semibold">Devoluciones Pendientes</span>
-              <UserCheck className="w-4 h-4 text-rose-400" />
+              <span className="font-semibold uppercase tracking-wider text-emerald-400">Pagados este mes</span>
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
             </div>
-            <div className="text-2xl font-black text-rose-400 mb-1">
-              {pendingReimbursements.length} <span className="text-xs font-normal text-slate-400">pendientes</span>
+            <div className="text-2xl font-black text-emerald-400 mb-1">
+              {paidExpenses.length} <span className="text-xs font-normal text-slate-400">completados</span>
             </div>
-            <Link href="/reimbursements/pending" className="text-[11px] text-sky-400 hover:underline font-semibold flex items-center gap-1">
-              <span>Gestionar cobros</span>
-              <ChevronRight className="w-3 h-3" />
-            </Link>
+            <span className="text-[11px] text-slate-400 block">Marcados con 1-tap ✓</span>
           </div>
         </div>
 
-        {/* SECTION: TARJETAS Y RESÚMENES */}
+        {/* SECTION 1: A PAGAR POR TARJETA */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-bold text-lg text-white flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-sky-400" />
-              Tus Tarjetas de Crédito y Cierres
+              A Pagar por Tarjeta de Crédito
             </h2>
             <Link href="/cards/new" className="text-xs text-sky-400 hover:underline font-semibold flex items-center gap-1">
               <PlusCircle className="w-3.5 h-3.5" />
@@ -237,9 +205,9 @@ export default function DashboardPage() {
           {activeCards.length === 0 ? (
             <div className="glass-card p-8 rounded-3xl text-center space-y-3">
               <CreditCard className="w-10 h-10 text-slate-600 mx-auto" />
-              <h3 className="font-bold text-white text-sm">Todavía no agregaste ninguna tarjeta</h3>
+              <h3 className="font-bold text-white text-sm">No tenés tarjetas registradas aún</h3>
               <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                Crea tu primera tarjeta indicando el banco, titular, días de cierre y vencimiento.
+                Creá tu primera tarjeta para asociar tus compras y cuotas.
               </p>
               <Link
                 href="/cards/new"
@@ -252,21 +220,32 @@ export default function DashboardPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {activeCards.map((card) => {
-                const stmt = store.statements.find((s) => s.card_id === card.id);
+                const cardExpenses = pendingExpenses.filter((e) => e.card_id === card.id);
+                const cardPendingARS = cardExpenses
+                  .filter((e) => e.currency === 'ARS')
+                  .reduce((sum, e) => sum + e.total_amount, 0);
+
+                const cardPendingUSD = cardExpenses
+                  .filter((e) => e.currency === 'USD')
+                  .reduce((sum, e) => sum + e.total_amount, 0);
+
                 return (
                   <div key={card.id} className="space-y-3">
                     <CardVisual card={card} />
                     <div className="glass-card p-4 rounded-2xl text-xs space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-400">Estado Resumen:</span>
-                        {stmt?.status === 'paid' ? (
-                          <Badge variant="green">Pagado ✓</Badge>
-                        ) : (
-                          <Badge variant="yellow">Pendiente</Badge>
-                        )}
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <span className="text-slate-400 font-bold uppercase text-[10px]">Total a Pagar:</span>
+                        <div className="text-right">
+                          <CurrencyDisplay amount={cardPendingARS} currency="ARS" size="md" />
+                          {cardPendingUSD > 0 && (
+                            <div className="mt-0.5">
+                              <CurrencyDisplay amount={cardPendingUSD} currency="USD" size="md" />
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between border-t border-slate-800 pt-2">
-                        <span className="text-slate-400">Próximo Cierre:</span>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">Día de Cierre:</span>
                         <span className="font-bold text-white">Día {card.default_closing_day}</span>
                       </div>
                       <div className="flex items-center justify-between">
@@ -281,69 +260,100 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* SECTION: DINERO QUE ME DEBEN & YO DEBO */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="glass-card p-6 rounded-3xl">
-            <div className="flex items-center justify-between mb-4">
+        {/* SECTION 2: GASTOS A PAGAR (CHECK RÁPIDO 1-TAP) */}
+        <div className="glass-card p-6 rounded-3xl space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div>
               <h2 className="font-bold text-base text-white flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-                Dinero que me deben
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                Gastos Pendientes y Pagos (Check 1-Tap)
               </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Tocá la casilla de verificación en cualquier gasto para marcarlo como pagado al instante
+              </p>
             </div>
-            {owedByPersonMap.size === 0 ? (
-              <div className="bg-slate-900/60 rounded-2xl p-6 text-center text-xs text-slate-400">
-                👍 Nadie te debe dinero actualmente.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {Array.from(owedByPersonMap.values()).map(({ person, count, totalARS, totalUSD }) => (
-                  <div key={person.id} className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
-                    <div>
-                      <h4 className="font-bold text-sm text-white">{person.name} {person.last_name || ''}</h4>
-                      <p className="text-[11px] text-slate-400">{count} {count === 1 ? 'gasto pendiente' : 'gastos pendientes'}</p>
-                    </div>
-                    <div className="text-right space-y-1">
-                      {totalARS > 0 && <CurrencyDisplay amount={totalARS} currency="ARS" size="md" />}
-                      {totalUSD > 0 && <CurrencyDisplay amount={totalUSD} currency="USD" size="md" />}
+            <Link href="/expenses/new" className="text-xs text-sky-400 hover:underline font-semibold">
+              + Nuevo gasto
+            </Link>
+          </div>
+
+          {activeExpenses.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 text-xs">
+              👍 No hay gastos cargados aún. ¡Usá el botón <b>"+ Registrar Gasto"</b> para cargar tu primera compra!
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {activeExpenses.map((exp) => {
+                const card = activeCards.find((c) => c.id === exp.card_id);
+                const purchaser = (store.people || []).find((p) => p.id === exp.purchaser_id);
+
+                return (
+                  <div
+                    key={exp.id}
+                    className={`p-4 rounded-2xl border transition flex items-center justify-between gap-4 ${
+                      exp.is_paid
+                        ? 'bg-slate-900/40 border-slate-800/80 opacity-75'
+                        : 'bg-slate-900/90 border-slate-700/60 hover:border-sky-500/40'
+                    }`}
+                  >
+                    {/* Left: Interactive 1-Tap Checkbox */}
+                    <button
+                      type="button"
+                      onClick={() => handleTogglePayment(exp.id)}
+                      className="flex items-center gap-3 focus:outline-none text-left group"
+                    >
+                      <div
+                        className={`w-7 h-7 rounded-xl flex items-center justify-center transition ${
+                          exp.is_paid
+                            ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/30'
+                            : 'bg-slate-800 border-2 border-slate-600 text-transparent group-hover:border-sky-400'
+                        }`}
+                      >
+                        ✓
+                      </div>
+
+                      <div>
+                        <div className={`font-bold text-sm ${exp.is_paid ? 'line-through text-slate-400' : 'text-white'}`}>
+                          {exp.description}
+                        </div>
+                        <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                          <span>{exp.merchant}</span>
+                          <span>•</span>
+                          <span>{card?.name || 'Tarjeta'}</span>
+                          {exp.installments_count > 1 && (
+                            <>
+                              <span>•</span>
+                              <span className="text-sky-400 font-semibold">{exp.installments_count} cuotas</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Right: Amount & Status Badge */}
+                    <div className="flex items-center gap-3">
+                      <CurrencyDisplay amount={exp.total_amount} currency={exp.currency} size="md" />
+
+                      <button
+                        type="button"
+                        onClick={() => handleTogglePayment(exp.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                          exp.is_paid
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30'
+                        }`}
+                      >
+                        {exp.is_paid ? '✓ Pagado' : 'A Pagar'}
+                      </button>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="glass-card p-6 rounded-3xl">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold text-base text-white flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-400" />
-                Dinero que yo debo
-              </h2>
+                );
+              })}
             </div>
-            {iOweReimbursements.length === 0 ? (
-              <div className="bg-slate-900/60 rounded-2xl p-6 text-center text-xs text-slate-400">
-                🎉 No tenés deudas pendientes de devolución.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {iOweReimbursements.map((r) => {
-                  const creditor = store.people.find((p) => p.id === r.creditor_person_id);
-                  const exp = store.expenses.find((e) => e.id === r.expense_id);
-                  return (
-                    <div key={r.id} className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
-                      <div>
-                        <h4 className="font-bold text-xs text-white">A: {creditor?.name}</h4>
-                        <p className="text-[11px] text-slate-400 truncate max-w-[180px]">{exp?.description || 'Gasto'}</p>
-                      </div>
-                      <CurrencyDisplay amount={r.amount} currency={r.currency} size="md" />
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          )}
         </div>
 
-        {/* SECTION: PROYECCIÓN DE CUOTAS FUTURAS */}
+        {/* SECTION 3: PROYECCIÓN DE CUOTAS FUTURAS (12 MESES) */}
         <div className="glass-card p-6 rounded-3xl space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-bold text-base text-white flex items-center gap-2">

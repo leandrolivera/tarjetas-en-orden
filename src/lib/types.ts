@@ -109,6 +109,7 @@ export interface Expense {
   purchase_date: string; // YYYY-MM-DD
   installments_count: number;
   distribution_type: DistributionType;
+  is_paid?: boolean;
   notes?: string | null;
   receipt_path?: string | null;
   created_by: string;

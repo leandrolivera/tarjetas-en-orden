@@ -82,6 +82,28 @@ export class DataStore {
     return clean;
   }
 
+  public static toggleExpensePaymentStatus(expenseId: string): AppStoreData {
+    const store = DataStore.getStore();
+    let newStatus = false;
+    store.expenses = store.expenses.map((e) => {
+      if (e.id === expenseId) {
+        newStatus = !e.is_paid;
+        return { ...e, is_paid: newStatus, updated_at: new Date().toISOString() };
+      }
+      return e;
+    });
+
+    DataStore.saveStore(store);
+    DataStore.addAuditLog(
+      store.households[0]?.id || 'household-default',
+      newStatus ? 'Marcó gasto como pagado' : 'Marcó gasto como pendiente',
+      'expense',
+      expenseId
+    );
+
+    return store;
+  }
+
   // AUDIT LOG HELPER
   public static addAuditLog(
     householdId: string,

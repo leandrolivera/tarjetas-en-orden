@@ -10,14 +10,9 @@ import { Expense } from '@/lib/types';
 import {
   PlusCircle,
   Search,
-  Filter,
-  CreditCard,
-  Tag,
   Calendar,
-  User,
-  ArrowUpDown,
-  FileText,
   FileSpreadsheet,
+  CheckCircle2,
 } from 'lucide-react';
 import { exportExpensesToCSV, downloadCSV } from '@/lib/csv';
 
@@ -33,7 +28,12 @@ export default function ExpenseListPage() {
     setStore(DataStore.getStore());
   }, []);
 
-  const filteredExpenses = store.expenses
+  const handleTogglePayment = (expenseId: string) => {
+    const updatedStore = DataStore.toggleExpensePaymentStatus(expenseId);
+    setStore({ ...updatedStore });
+  };
+
+  const filteredExpenses = (store.expenses || [])
     .filter((e) => !e.archived_at)
     .filter((e) => {
       if (searchTerm) {
@@ -66,7 +66,7 @@ export default function ExpenseListPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-black text-white tracking-tight">Registro de Gastos</h1>
-            <p className="text-xs text-slate-400">Consultá, filtrá y administrá todos los movimientos registrados</p>
+            <p className="text-xs text-slate-400">Tocá la casilla ✓ de cualquier gasto para marcarlo como pagado en 1 toque</p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -91,7 +91,6 @@ export default function ExpenseListPage() {
         {/* FILTERS & SEARCH BAR */}
         <div className="glass-card p-4 rounded-3xl space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
-            {/* Search Input */}
             <div className="sm:col-span-2 relative">
               <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
               <input
@@ -103,7 +102,6 @@ export default function ExpenseListPage() {
               />
             </div>
 
-            {/* Filter by Card */}
             <div>
               <select
                 value={selectedCardId}
@@ -111,7 +109,7 @@ export default function ExpenseListPage() {
                 className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-200 text-xs focus:outline-none focus:border-sky-500 transition"
               >
                 <option value="">Todas las Tarjetas</option>
-                {store.cards.map((c) => (
+                {(store.cards || []).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
@@ -119,7 +117,6 @@ export default function ExpenseListPage() {
               </select>
             </div>
 
-            {/* Filter by Category */}
             <div>
               <select
                 value={selectedCategoryId}
@@ -127,7 +124,7 @@ export default function ExpenseListPage() {
                 className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-200 text-xs focus:outline-none focus:border-sky-500 transition"
               >
                 <option value="">Todas las Categorías</option>
-                {store.categories.map((cat) => (
+                {(store.categories || []).map((cat) => (
                   <option key={cat.id} value={cat.id}>
                     {cat.name}
                   </option>
@@ -135,7 +132,6 @@ export default function ExpenseListPage() {
               </select>
             </div>
 
-            {/* Filter by Currency */}
             <div>
               <select
                 value={selectedCurrency}
@@ -161,11 +157,11 @@ export default function ExpenseListPage() {
               <table className="w-full text-left text-xs text-slate-300">
                 <thead className="bg-slate-900/90 text-slate-400 text-[10px] font-bold uppercase tracking-wider border-b border-slate-800">
                   <tr>
+                    <th className="py-3.5 px-4 text-center">Estado Pago</th>
                     <th className="py-3.5 px-4">Fecha / Compra</th>
                     <th className="py-3.5 px-4">Comercio</th>
                     <th className="py-3.5 px-4">Tarjeta</th>
                     <th className="py-3.5 px-4">Categoría</th>
-                    <th className="py-3.5 px-4">Distribución</th>
                     <th className="py-3.5 px-4 text-right">Cuotas</th>
                     <th className="py-3.5 px-4 text-right">Importe Total</th>
                     <th className="py-3.5 px-4 text-center">Acciones</th>
@@ -173,19 +169,35 @@ export default function ExpenseListPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {filteredExpenses.map((exp) => {
-                    const card = store.cards.find((c) => c.id === exp.card_id);
-                    const cat = store.categories.find((c) => c.id === exp.category_id);
-                    const purchaser = store.people.find((p) => p.id === exp.purchaser_id);
+                    const card = (store.cards || []).find((c) => c.id === exp.card_id);
+                    const cat = (store.categories || []).find((c) => c.id === exp.category_id);
+                    const purchaser = (store.people || []).find((p) => p.id === exp.purchaser_id);
 
                     return (
-                      <tr key={exp.id} className="hover:bg-slate-800/40 transition">
+                      <tr key={exp.id} className={`transition ${exp.is_paid ? 'bg-slate-900/30 opacity-70' : 'hover:bg-slate-800/40'}`}>
+                        <td className="py-3.5 px-4 text-center">
+                          <button
+                            onClick={() => handleTogglePayment(exp.id)}
+                            className={`w-6 h-6 rounded-lg font-bold text-xs flex items-center justify-center mx-auto transition ${
+                              exp.is_paid
+                                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30'
+                                : 'bg-slate-800 border border-slate-600 text-transparent hover:border-sky-400'
+                            }`}
+                            title={exp.is_paid ? 'Marcar como pendiente' : 'Marcar como pagado'}
+                          >
+                            ✓
+                          </button>
+                        </td>
+
                         <td className="py-3.5 px-4">
-                          <div className="font-bold text-white text-sm">{exp.description}</div>
+                          <div className={`font-bold text-sm ${exp.is_paid ? 'line-through text-slate-400' : 'text-white'}`}>
+                            {exp.description}
+                          </div>
                           <div className="text-[10px] text-slate-400 flex items-center gap-1">
                             <Calendar className="w-3 h-3 text-sky-400" />
                             <span>{exp.purchase_date}</span>
                             <span>•</span>
-                            <span>Compró: <b>{purchaser?.name}</b></span>
+                            <span>Compró: <b>{purchaser?.name || 'Titular'}</b></span>
                           </div>
                         </td>
 
@@ -207,14 +219,6 @@ export default function ExpenseListPage() {
 
                         <td className="py-3.5 px-4">
                           <Badge variant="blue">{cat?.name || 'Categoría'}</Badge>
-                        </td>
-
-                        <td className="py-3.5 px-4 capitalize text-slate-300">
-                          {exp.distribution_type === 'shared_equal' && '50 / 50 Compartido'}
-                          {exp.distribution_type === 'own' && '100% Propio'}
-                          {exp.distribution_type === 'third_party_100' && '100% Tercero'}
-                          {exp.distribution_type === 'shared_percentage' && 'Porcentaje'}
-                          {exp.distribution_type === 'shared_amount' && 'Importes'}
                         </td>
 
                         <td className="py-3.5 px-4 text-right font-mono font-bold text-sky-400">

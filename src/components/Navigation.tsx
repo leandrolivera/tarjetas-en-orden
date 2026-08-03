@@ -21,7 +21,6 @@ import {
   History,
   Tag,
   UserCheck,
-  Shield,
 } from 'lucide-react';
 import { DataStore } from '@/lib/data-store';
 import { Notification } from '@/lib/types';
@@ -39,17 +38,21 @@ export function Navigation({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const s = DataStore.getStore();
     setStore(s);
-    const unread = s.notifications.filter((n) => !n.is_read && !n.is_dismissed);
-    setUnreadNotifications(unread);
+    if (s.notifications) {
+      const unread = s.notifications.filter((n) => !n.is_read && !n.is_dismissed);
+      setUnreadNotifications(unread);
+    }
   }, [pathname]);
 
-  const activeHousehold = store.households[0];
-  const currentUser = store.profiles.find((p) => p.id === store.currentUserId) || store.profiles[0];
+  const activeHousehold = store.households && store.households.length > 0 ? store.households[0] : null;
+  const currentUser = store.profiles && store.profiles.length > 0
+    ? store.profiles.find((p) => p.id === store.currentUserId) || store.profiles[0]
+    : null;
 
   const handleMarkAllNotificationsRead = () => {
     const updated = {
       ...store,
-      notifications: store.notifications.map((n) => ({ ...n, is_read: true })),
+      notifications: (store.notifications || []).map((n) => ({ ...n, is_read: true })),
     };
     DataStore.saveStore(updated);
     setStore(updated);
@@ -87,7 +90,7 @@ export function Navigation({ children }: { children: React.ReactNode }) {
             <h1 className="font-extrabold text-base tracking-tight text-white">Tarjetas en Orden</h1>
             <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              {activeHousehold?.name || 'Hogar'}
+              {activeHousehold ? activeHousehold.name : 'Sin Hogar'}
             </span>
           </div>
         </div>
@@ -152,31 +155,42 @@ export function Navigation({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* User Card at bottom of sidebar */}
-        <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <img
-              src={currentUser.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
-              alt={currentUser.full_name || 'User'}
-              className="w-8 h-8 rounded-full border border-sky-500/40 object-cover"
-            />
-            <div className="text-left leading-tight">
-              <span className="text-xs font-semibold text-slate-200 block truncate max-w-[110px]">
-                {currentUser.full_name}
-              </span>
-              <span className="text-[10px] text-slate-400 block truncate max-w-[110px]">
-                {currentUser.email}
-              </span>
+        {currentUser ? (
+          <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <img
+                src={currentUser.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
+                alt={currentUser.full_name || 'Usuario'}
+                className="w-8 h-8 rounded-full border border-sky-500/40 object-cover"
+              />
+              <div className="text-left leading-tight">
+                <span className="text-xs font-semibold text-slate-200 block truncate max-w-[110px]">
+                  {currentUser.full_name || 'Usuario'}
+                </span>
+                <span className="text-[10px] text-slate-400 block truncate max-w-[110px]">
+                  {currentUser.email || ''}
+                </span>
+              </div>
             </div>
-          </div>
 
-          <Link
-            href="/profile"
-            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
-            title="Mi Perfil"
-          >
-            <Settings className="w-4 h-4" />
-          </Link>
-        </div>
+            <Link
+              href="/profile"
+              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+              title="Mi Perfil"
+            >
+              <Settings className="w-4 h-4" />
+            </Link>
+          </div>
+        ) : (
+          <div className="pt-4 border-t border-slate-800">
+            <Link
+              href="/register"
+              className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-2 px-3 rounded-xl text-xs flex items-center justify-center"
+            >
+              Crear Cuenta
+            </Link>
+          </div>
+        )}
       </aside>
 
       {/* MAIN CONTAINER */}
@@ -193,7 +207,7 @@ export function Navigation({ children }: { children: React.ReactNode }) {
           <div className="hidden md:flex items-center gap-2">
             <span className="text-xs font-medium text-slate-400">Espacio activo:</span>
             <span className="bg-slate-800 text-sky-400 text-xs font-semibold px-2.5 py-1 rounded-lg border border-slate-700">
-              {activeHousehold?.name || 'Hogar'}
+              {activeHousehold ? activeHousehold.name : 'Sin Hogar Activo'}
             </span>
           </div>
 
@@ -231,7 +245,7 @@ export function Navigation({ children }: { children: React.ReactNode }) {
                   </div>
 
                   <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {store.notifications.length === 0 ? (
+                    {(!store.notifications || store.notifications.length === 0) ? (
                       <p className="text-xs text-slate-500 text-center py-4">Sin notificaciones</p>
                     ) : (
                       store.notifications.map((n) => (
@@ -264,43 +278,52 @@ export function Navigation({ children }: { children: React.ReactNode }) {
             </div>
 
             {/* Profile Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setShowUserDropdown(!showUserDropdown)}
-                className="flex items-center gap-2 focus:outline-none"
-              >
-                <img
-                  src={currentUser.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
-                  alt={currentUser.full_name || 'User'}
-                  className="w-8 h-8 rounded-full border border-sky-500/40 object-cover"
-                />
-              </button>
+            {currentUser ? (
+              <div className="relative">
+                <button
+                  onClick={() => setShowUserDropdown(!showUserDropdown)}
+                  className="flex items-center gap-2 focus:outline-none"
+                >
+                  <img
+                    src={currentUser.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
+                    alt={currentUser.full_name || 'Usuario'}
+                    className="w-8 h-8 rounded-full border border-sky-500/40 object-cover"
+                  />
+                </button>
 
-              {showUserDropdown && (
-                <div className="absolute right-0 mt-2 w-48 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-2 z-50">
-                  <div className="px-3 py-2 border-b border-slate-800 mb-1">
-                    <p className="text-xs font-bold text-white truncate">{currentUser.full_name}</p>
-                    <p className="text-[10px] text-slate-400 truncate">{currentUser.email}</p>
+                {showUserDropdown && (
+                  <div className="absolute right-0 mt-2 w-48 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-2 z-50">
+                    <div className="px-3 py-2 border-b border-slate-800 mb-1">
+                      <p className="text-xs font-bold text-white truncate">{currentUser.full_name || 'Usuario'}</p>
+                      <p className="text-[10px] text-slate-400 truncate">{currentUser.email || ''}</p>
+                    </div>
+                    <Link
+                      href="/profile"
+                      onClick={() => setShowUserDropdown(false)}
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-slate-300 hover:bg-slate-800 transition"
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                      <span>Mi Perfil</span>
+                    </Link>
+                    <Link
+                      href="/register"
+                      onClick={() => setShowUserDropdown(false)}
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-rose-400 hover:bg-rose-500/10 transition"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Cerrar sesión</span>
+                    </Link>
                   </div>
-                  <Link
-                    href="/profile"
-                    onClick={() => setShowUserDropdown(false)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-slate-300 hover:bg-slate-800 transition"
-                  >
-                    <Settings className="w-3.5 h-3.5" />
-                    <span>Mi Perfil</span>
-                  </Link>
-                  <Link
-                    href="/login"
-                    onClick={() => setShowUserDropdown(false)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-rose-400 hover:bg-rose-500/10 transition"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>Cerrar sesión</span>
-                  </Link>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            ) : (
+              <Link
+                href="/register"
+                className="bg-sky-600 text-white font-bold px-3 py-1.5 rounded-xl text-xs hover:bg-sky-500 transition"
+              >
+                Crear Cuenta
+              </Link>
+            )}
           </div>
         </header>
 
